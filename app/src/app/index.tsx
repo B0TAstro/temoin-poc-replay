@@ -16,7 +16,7 @@ import { useFpsMeter } from '@/diagnostics/useFpsMeter';
 const TARGET_FPS = 60;
 
 export default function CameraScreen() {
-  useKeepAwake(); // sinon l'écran se verrouille et iOS coupe la caméra
+  useKeepAwake(); // otherwise the screen locks and iOS stops the camera
   const { hasPermission, canRequestPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const { fps, droppedCount, onFrameTimestamp, onFrameDropped } = useFpsMeter();
@@ -26,7 +26,7 @@ export default function CameraScreen() {
     if (!hasPermission && canRequestPermission) requestPermission();
   }, [hasPermission, canRequestPermission, requestPermission]);
 
-  // Sortie d'images uniquement pour mesurer : petite résolution, image libérée tout de suite.
+  // Frame output used only for measuring: small resolution, each frame released right away.
   const frameOutput = useFrameOutput({
     targetResolution: CommonResolutions.VGA_16_9,
     onFrame(frame) {
@@ -41,13 +41,13 @@ export default function CameraScreen() {
   if (!hasPermission) {
     return (
       <View style={styles.center}>
-        <Text style={styles.message}>Témoin a besoin de la caméra.</Text>
+        <Text style={styles.message}>Témoin needs access to the camera.</Text>
         {!canRequestPermission && (
-          <Text style={styles.hint}>Autorise-la dans Réglages › Témoin.</Text>
+          <Text style={styles.hint}>Allow it in Settings › Témoin.</Text>
         )}
         {canRequestPermission && (
           <Pressable style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Autoriser</Text>
+            <Text style={styles.buttonText}>Allow</Text>
           </Pressable>
         )}
       </View>
@@ -57,7 +57,7 @@ export default function CameraScreen() {
   if (device == null) {
     return (
       <View style={styles.center}>
-        <Text style={styles.message}>Aucune caméra arrière trouvée.</Text>
+        <Text style={styles.message}>No back camera found.</Text>
       </View>
     );
   }
@@ -78,7 +78,7 @@ export default function CameraScreen() {
           {fps.toFixed(1)} fps
         </Text>
         <Text style={styles.detail}>
-          demandé {TARGET_FPS} · configuré {selectedFps ?? '—'} · perdues {droppedCount}
+          requested {TARGET_FPS} · configured {selectedFps ?? '—'} · dropped {droppedCount}
         </Text>
       </View>
     </View>

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * Mesure le fps réel à partir des horodatages caméra (en secondes) des images reçues.
- * On compte les images sur la dernière seconde de temps caméra : la gigue du thread JS
- * n'influence donc pas la mesure, seul le moment de l'affichage en dépend.
+ * Measures the real fps from the camera timestamps (in seconds) of the received frames.
+ * Frames are counted over the last second of camera time, so JS thread jitter does not
+ * affect the measurement — only when it gets displayed.
  */
 export function useFpsMeter(refreshMs = 500) {
   const timestamps = useRef<number[]>([]);

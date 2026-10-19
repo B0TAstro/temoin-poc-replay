@@ -1,4 +1,4 @@
-> Conventions fournies par le template Expo (SDK 58). Les chemins ci-dessous sont relatifs au dossier `app/`, et les commandes se lancent depuis `app/`.
+> Conventions shipped with the Expo template (SDK 58). Paths below are relative to `app/`, and commands are run from `app/`.
 
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 

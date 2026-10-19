@@ -12,7 +12,7 @@
       "bundleIdentifier": "com.tomboullay.temoin",
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "Témoin filme le terrain pour pouvoir revoir les 30 dernières secondes. La vidéo reste sur ce téléphone."
+        "NSCameraUsageDescription": "Témoin films the court so the last 30 seconds can be replayed. The video stays on this phone."
       }
     },
     "android": {

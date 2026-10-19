@@ -1,28 +1,28 @@
-# Témoin · POC replay
+# Témoin · replay POC
 
-Application mobile pour les matchs de tennis amateurs sans arbitre : les téléphones posés au bord du
-terrain filment en continu et gardent les 30 dernières secondes. En cas de désaccord, « VAR » rejoue
-le point au ralenti, image par image, sur tous les téléphones du match. Le score est co-validé par les
-deux joueurs.
+A mobile app for amateur tennis matches played without an umpire: phones standing at the side of the
+court film continuously and keep the last 30 seconds. When players disagree, "VAR" replays the point
+in slow motion, frame by frame, on every phone of the match. The score is co-validated by both
+players.
 
 ## Structure
 
-| Dossier | Contenu |
+| Folder | Content |
 |---|---|
-| `app/` | Application Expo (React Native, TypeScript, development build) |
-| `app/src/app/` | Écrans (expo-router) |
-| `app/src/diagnostics/` | Mesures affichées en surimpression (fps réel, …) |
-| `docs/` | Description du projet, plan par étapes, conventions, guides |
-| `server/` *(à venir)* | Relais WebSocket Node pour synchroniser score et replay |
-| `shared/` *(à venir)* | Types du protocole partagés entre l'app et le serveur |
+| `app/` | Expo app (React Native, TypeScript, development build) |
+| `app/src/app/` | Screens (expo-router) |
+| `app/src/diagnostics/` | On-screen measurements (real fps, …) |
+| `docs/` | Project brief, step-by-step plan, conventions, guides |
+| `server/` *(coming)* | Node WebSocket relay to sync score and replay |
+| `shared/` *(coming)* | Protocol types shared by the app and the server |
 
 ## Documentation
-- [Projet et contraintes](docs/projet.md)
-- [Plan technique et étapes](docs/plan.md)
-- [Lancer sur un iPhone](docs/lancer-sur-iphone.md)
-- [Conventions Expo](docs/conventions-expo.md)
+- [Project and constraints](docs/project.md)
+- [Technical plan and steps](docs/plan.md)
+- [Running on an iPhone](docs/running-on-iphone.md)
+- [Expo conventions](docs/expo-conventions.md)
 
-## État d'avancement
-- [x] Étape 0 : socle Expo + development build
-- [x] Étape 1 : caméra arrière plein écran à 60 fps, fps réel affiché *(à valider sur iPhone)*
-- [ ] Étape 2 : enregistrer un clip et le relire
+## Progress
+- [x] Step 0: Expo foundation + development build
+- [x] Step 1: full-screen back camera at 60 fps, real fps displayed *(to be verified on iPhone)*
+- [ ] Step 2: record a clip and play it back

@@ -1,12 +1,12 @@
-# Plan — Témoin · POC replay
+# Plan — Témoin · replay POC
 
-## Contexte
-Le dépôt est vide (seul `CLAUDE.md`). Le POC doit valider trois briques : buffer vidéo circulaire de 30 s, replay (ralenti, image par image, zoom), score co-validé entre deux téléphones. Stack imposée : Expo dev build + TypeScript, react-native-vision-camera, react-native-video, relais WebSocket Node sur le Wi-Fi local, appairage QR. Aucune vidéo ne quitte le téléphone.
+## Context
+The repository started empty (only `CLAUDE.md`). The POC must validate three building blocks: a 30 s circular video buffer, replay (slow motion, frame by frame, zoom), and a score co-validated across two phones. Imposed stack: Expo dev build + TypeScript, react-native-vision-camera, react-native-video, a Node WebSocket relay on the local Wi-Fi, QR pairing. No video ever leaves the phone.
 
-Décisions (validées) :
-- Tests sur **iPhone**.
-- **Deux téléphones = deux angles**, dans la même session. Chacun filme, garde son propre buffer et affiche le score en permanence. Un seul téléphone doit aussi fonctionner (on commence avec un seul).
-- **VAR sur n'importe quel téléphone → replay en même temps sur les deux**, chacun rejouant **son propre angle** au même instant, contrôles synchronisés (pause, vitesse, image par image, position). Aucune vidéo ne circule entre téléphones.
+Decisions (approved):
+- Testing on **iPhone**.
+- **Two phones = two camera angles**, in the same session. Each one films, keeps its own buffer and shows the score at all times. A single phone must work too (we start with one).
+- **VAR on any phone → replay at the same time on both**, each one replaying **its own angle** at the same instant, with synchronized controls (pause, speed, frame by frame, position). No video travels between phones.
 
 ---
 
@@ -14,111 +14,111 @@ Décisions (validées) :
 
 ```
 temoin-poc-replay/
-├── CLAUDE.md                 # Point d'entrée pour Claude Code (importe docs/)
+├── CLAUDE.md                 # Entry point for Claude Code (imports docs/)
 ├── README.md
-├── docs/                     # Projet, plan, conventions, guides
-├── app/                      # Application Expo (dev build)
+├── docs/                     # Project brief, plan, conventions, guides
+├── app/                      # Expo app (dev build)
 │   └── src/
-│       ├── app/              # Écrans (expo-router)
-│       │   ├── index.tsx     # Accueil : « Créer un match » (affiche QR) / « Rejoindre » (scanne QR)
-│       │   ├── match.tsx     # Écran SCORE : caméra en fond + score + gros boutons + bouton VAR
-│       │   └── replay.tsx    # Écran REPLAY : lecteur, x0,25 / x0,5, ◀ frame / frame ▶, zoom
-│       ├── buffer/           # Brique 1
-│       │   ├── SegmentRecorder.ts   # boucle start/stop d'enregistrement VisionCamera
-│       │   ├── SegmentStore.ts      # liste des segments, suppression > 30 s, verrous pendant replay
-│       │   └── useRollingBuffer.ts  # hook qui relie caméra + store
-│       ├── replay/           # Brique 2
-│       │   ├── ReplayPlayer.tsx     # react-native-video + enchaînement de segments
+│       ├── app/              # Screens (expo-router)
+│       │   ├── index.tsx     # Home: "Create a match" (shows QR) / "Join" (scans QR)
+│       │   ├── match.tsx     # SCORE screen: camera in the background + score + big buttons + VAR button
+│       │   └── replay.tsx    # REPLAY screen: player, x0.25 / x0.5, ◀ frame / frame ▶, zoom
+│       ├── buffer/           # Block 1
+│       │   ├── SegmentRecorder.ts   # VisionCamera start/stop recording loop
+│       │   ├── SegmentStore.ts      # segment list, deletion after 30 s, locks during replay
+│       │   └── useRollingBuffer.ts  # hook wiring camera + store
+│       ├── replay/           # Block 2
+│       │   ├── ReplayPlayer.tsx     # react-native-video + chaining segments
 │       │   ├── useFrameStep.ts      # seek ± 1/fps
 │       │   └── ZoomableView.tsx     # pinch + pan (gesture-handler + reanimated)
-│       ├── score/            # Brique 3
-│       │   ├── tennis.ts            # logique de score pure (points, jeux, sets, avantage)
-│       │   ├── tennis.test.ts       # tests Jest
-│       │   └── useScoreSync.ts      # client WebSocket + état « proposé / validé »
-│       ├── pairing/          # QR : génération (react-native-qrcode-svg) + scan (code scanner VisionCamera)
-│       └── diagnostics/      # overlay debug : fps réel, segments, Mo disque, batterie, latence VAR
-├── server/                   # Relais Node (ws) : salles par matchId, état canonique du score
-└── shared/protocol.ts        # Types des messages échangés (app + serveur)
+│       ├── score/            # Block 3
+│       │   ├── tennis.ts            # pure scoring logic (points, games, sets, advantage)
+│       │   ├── tennis.test.ts       # Jest tests
+│       │   └── useScoreSync.ts      # WebSocket client + "proposed / validated" state
+│       ├── pairing/          # QR: generation (react-native-qrcode-svg) + scanning (VisionCamera code scanner)
+│       └── diagnostics/      # debug overlay: real fps, segments, disk MB, battery, VAR latency
+├── server/                   # Node relay (ws): rooms per matchId, canonical score state
+└── shared/protocol.ts        # Message types shared by app and server
 ```
 
-Choix justifiables :
-- **expo-router** : template Expo par défaut, 3 écrans suffisent.
-- **Logique de score pure** (`tennis.ts`) séparée du réseau : testable sans téléphone.
-- **Serveur qui garde l'état canonique** (pas un simple écho) : un téléphone qui se reconnecte récupère le score.
+Choices we can justify:
+- **expo-router**: the Expo template default; 3 screens are enough.
+- **Pure scoring logic** (`tennis.ts`) separated from networking: testable without a phone.
+- **Server holds the canonical state** (not a plain echo): a phone that reconnects gets the score back.
 
 ---
 
-## 2. Stratégie du buffer de 30 s
+## 2. 30 s buffer strategy
 
-### Principe : segments courts qui tournent, sur disque
-On ne garde **aucune image en mémoire** (1 s de 1080p60 brut ≈ 370 Mo). On laisse l'encodeur matériel H.264 écrire des fichiers MP4 courts :
+### Principle: short rotating segments, on disk
+**No frame is kept in memory** (1 s of raw 1080p60 ≈ 370 MB). We let the hardware H.264 encoder write short MP4 files:
 
-1. `camera.startRecording()` → au bout de **D = 5 s**, `stopRecording()` → le callback `onRecordingFinished` donne le chemin du fichier → on relance immédiatement `startRecording()`.
-2. `SegmentStore` garde la liste `{ chemin, début, fin, durée }`. Dès que la fin d'un segment a plus de 30 s (+ une marge d'un segment), on le supprime (`expo-file-system`). En régime établi : **7 fichiers max** (~35 s), soit ~30–60 Mo selon le débit choisi → l'espace disque reste stable.
-3. Fichiers dans le dossier cache de l'app, purgé au lancement (rien ne survit à une session).
+1. `camera.startRecording()` → after **D = 5 s**, `stopRecording()` → the `onRecordingFinished` callback gives the file path → we immediately call `startRecording()` again.
+2. `SegmentStore` keeps the list `{ path, start, end, duration }`. As soon as a segment ended more than 30 s ago (+ one segment of margin), it is deleted (`expo-file-system`). In steady state: **at most 7 files** (~35 s), i.e. ~30–60 MB depending on bitrate → disk usage stays flat.
+3. Files live in the app's cache folder, purged at launch (nothing survives a session).
 
-### Appui sur VAR
-1. On appelle `stopRecording()` sur le segment en cours → il est finalisé et contient l'instant de l'appui.
-2. On **verrouille** les 2–3 derniers segments (le store ne les supprime pas pendant le replay).
-3. On ouvre l'écran replay positionné ~5 s avant l'appui, en lisant les segments à la suite (passage automatique au segment précédent/suivant aux bords, timeline globale « −10 s … 0 s »).
-4. L'enregistrement reprend en arrière-plan sur de nouveaux segments (le match continue). À la sortie du replay, on déverrouille et le nettoyage reprend.
+### Pressing VAR
+1. We call `stopRecording()` on the current segment → it is finalized and contains the moment of the press.
+2. We **lock** the last 2–3 segments (the store does not delete them during the replay).
+3. We open the replay screen positioned ~5 s before the press, playing the segments back to back (automatic switch to the previous/next segment at the edges, global timeline "−10 s … 0 s").
+4. Recording resumes in the background into new segments (the match goes on). When leaving the replay, we unlock and cleanup resumes.
 
-### Le point faible connu : le trou entre deux segments
-Entre `stop` et `start`, VisionCamera met quelques dizaines à quelques centaines de ms : ces images sont perdues. On le **mesure dès l'étape 4** (horodatage de fin d'un segment vs début du suivant). Pistes si c'est trop :
-- segments plus longs (10 s → moins de trous, mais finalisation VAR identique) ;
-- plan B : un petit module natif (AVAssetWriter sur iOS / MediaCodec + MediaMuxer sur Android) qui garde les **échantillons H.264 encodés** dans un tampon circulaire et n'écrit le MP4 qu'à l'appui sur VAR — zéro trou, mais du code natif. On ne le fait que si les mesures l'imposent.
+### Known weak spot: the gap between two segments
+Between `stop` and `start`, VisionCamera takes a few tens to a few hundred ms: those frames are lost. We **measure it from step 4** (end timestamp of one segment vs start of the next). Options if it is too much:
+- longer segments (10 s → fewer gaps, same VAR finalization);
+- plan B: a small native module (AVAssetWriter on iOS / MediaCodec + MediaMuxer on Android) that keeps **encoded H.264 samples** in a ring buffer and only writes the MP4 when VAR is pressed — zero gap, but native code. Only if measurements demand it.
 
 ---
 
-## 3. Risques
+## 3. Risks
 
-| Risque | Pourquoi | Ce qu'on fait |
+| Risk | Why | What we do |
 |---|---|---|
-| **fps réel < 60** | Tous les capteurs n'offrent pas 60 fps à toutes les résolutions ; Android peut produire du fps variable ; la chauffe peut faire baisser le débit | Choisir le format avec `useCameraFormat({ fps: 60, videoResolution: 1280×720 })`, afficher le format retenu, vérifier sur un fichier enregistré (nombre d'images / durée). 720p60 vaut mieux que 1080p30 pour une balle de tennis. |
-| **Trous entre segments** | Voir ci-dessus | Mesure, puis segments plus longs ou module natif. |
-| **Latence VAR → image** | Finalisation du MP4 (~0,2–0,5 s) + navigation + chargement du lecteur | Mesurer appui → premier `onReadyForDisplay`. Objectif < 1,5 s. Préparer l'écran replay à l'avance si besoin. |
-| **Image par image imprécise** | Le seek vise un temps, pas une frame ; reculer impose de repartir de la dernière image clé | Seek à ± 1/fps en pause, tolérance nulle ; régler un intervalle d'images clés court (≈ 1 s) si le recul est lent. |
-| **Batterie / chauffe sur 1 h+** | Capteur + encodeur + écran allumés en continu | 720p plutôt que 4K, débit modéré, luminosité baissée, `expo-keep-awake` (sinon la caméra s'arrête en veille), journal batterie toutes les minutes (`expo-battery`), état thermique si dispo. Test d'endurance d'1 h dédié. |
-| **App en arrière-plan** | iOS/Android coupent la caméra si l'app n'est plus au premier plan | Assumé pour le POC : l'écran reste allumé sur l'app. Le buffer redémarre proprement au retour. |
-| **Réseau local** | Wi-Fi d'un club souvent absent/isolé entre clients | Pour le POC : même Wi-Fi que l'ordi. Reconnexion auto + état canonique côté serveur. |
-| **Versions de libs** | VisionCamera / react-native-video évoluent vite avec la New Architecture | Vérifier la compatibilité avec la version d'Expo à l'étape 0, figer les versions. |
+| **Real fps < 60** | Not every sensor offers 60 fps at every resolution; Android may produce variable fps; heat can lower throughput | Pick the format with `useCameraFormat({ fps: 60, videoResolution: 1280×720 })`, show the selected format, check on a recorded file (frame count / duration). 720p60 beats 1080p30 for a tennis ball. |
+| **Gaps between segments** | See above | Measure, then longer segments or native module. |
+| **VAR → picture latency** | MP4 finalization (~0.2–0.5 s) + navigation + player load | Measure press → first `onReadyForDisplay`. Target < 1.5 s. Prepare the replay screen ahead if needed. |
+| **Imprecise frame stepping** | Seeking targets a time, not a frame; stepping back requires decoding from the previous keyframe | Seek ± 1/fps while paused, zero tolerance; shorten the keyframe interval (≈ 1 s) if stepping back is slow. |
+| **Battery / heat over 1 h+** | Sensor + encoder + screen on continuously | 720p rather than 4K, moderate bitrate, lower brightness, `expo-keep-awake` (otherwise the camera stops when the screen locks), battery log every minute (`expo-battery`), thermal state if available. Dedicated 1 h endurance test. |
+| **App in background** | iOS/Android stop the camera when the app is not in the foreground | Accepted for the POC: the screen stays on the app. The buffer restarts cleanly when coming back. |
+| **Local network** | Club Wi-Fi is often missing or isolates clients | For the POC: same Wi-Fi as the computer. Auto-reconnect + canonical state on the server. |
+| **Library versions** | VisionCamera / react-native-video move fast with the New Architecture | Check compatibility with the Expo version at step 0, pin versions. |
 
 ---
 
-## 4. Étapes testables (chacune = un commit)
+## 4. Testable steps (one commit each)
 
-**Brique 0 — socle**
-0. Projet Expo TypeScript + dev build installé sur le vrai téléphone, écran « hello ». *Test : l'app se lance sur le téléphone.*
+**Block 0 — foundation**
+0. Expo TypeScript project + dev build installed on the real phone, "hello" screen. *Test: the app launches on the phone.*
 
-**Brique 2 d'abord sur un clip unique (plus simple que le buffer)**
-1. Aperçu caméra + choix du format 60 fps + overlay affichant résolution / fps retenus. *Test : on lit 60 fps à l'écran.*
-2. Bouton « enregistrer 5 s » → lecture du fichier avec react-native-video. *Test : le clip se relit ; on vérifie son fps réel.*
-3. Contrôles de replay sur ce clip : x0,25 / x0,5 / x1, pause, ◀ frame / frame ▶, pinch-zoom + déplacement. *Test : avancer/reculer d'une image fonctionne, le zoom est fluide.*
+**Block 2 first, on a single clip (simpler than the buffer)**
+1. Camera preview + 60 fps format + overlay showing selected resolution / fps. *Test: we read 60 fps on screen.*
+2. "Record 5 s" button → playback of the file with react-native-video. *Test: the clip plays back; we check its real fps.*
+3. Replay controls on that clip: x0.25 / x0.5 / x1, pause, ◀ frame / frame ▶, pinch-zoom + pan. *Test: stepping one frame forward/back works, zoom is smooth.*
 
-**Brique 1 — buffer circulaire**
-4. Boucle de segments + `SegmentStore` + suppression > 30 s + overlay debug (nb fichiers, Mo, trou mesuré entre segments). *Test : 10 min d'enregistrement, disque stable, ≤ 7 fichiers.*
-5. Bouton VAR : finalisation, verrouillage, replay enchaîné sur les derniers segments, reprise de l'enregistrement. *Test : on frappe dans ses mains, on appuie VAR, on retrouve le clap ; latence affichée.*
-6. Test d'endurance 1 h : journal batterie / chauffe / fps. *Test : rapport chiffré pour le jury.* → décision : segments OK ou module natif.
+**Block 1 — circular buffer**
+4. Segment loop + `SegmentStore` + deletion after 30 s + debug overlay (file count, MB, measured gap between segments). *Test: 10 min of recording, stable disk usage, ≤ 7 files.*
+5. VAR button: finalization, locking, chained replay of the last segments, recording resumes. *Test: clap your hands, press VAR, find the clap; latency displayed.*
+6. 1 h endurance test: battery / heat / fps log. *Test: figures for the jury.* → decision: segments are fine, or native module.
 
-**Brique 3 — score co-validé**
-7. `tennis.ts` pur + tests Jest (15-30-40, égalité/avantage, jeux, tie-break, sets). *Test : `npm test` vert, sans téléphone.*
-8. Serveur relais Node (`ws`) : salles, état canonique, protocole `shared/protocol.ts`. Un téléphone s'y connecte et affiche le score. *Test : un point marqué apparaît dans les logs serveur.*
-9. Appairage QR (le téléphone témoin affiche `ws://IP:port` + `matchId`, l'autre scanne) + co-validation : un joueur propose « point pour X », le point n'est compté que quand l'autre valide (sinon refus / annulation). *Test : deux téléphones, même score en temps réel.*
+**Block 3 — co-validated score**
+7. Pure `tennis.ts` + Jest tests (15-30-40, deuce/advantage, games, tie-break, sets). *Test: `npm test` green, no phone needed.*
+8. Node relay server (`ws`): rooms, canonical state, protocol in `shared/protocol.ts`. One phone connects and shows the score. *Test: a scored point shows up in the server logs.*
+9. QR pairing (the camera phone shows `ws://IP:port` + `matchId`, the other one scans) + co-validation: one player proposes "point for X", the point only counts once the other one validates (otherwise reject / cancel). *Test: two phones, same score in real time.*
 
-**Synchro du replay entre deux angles**
-10. Horloge commune : chaque téléphone estime son décalage avec le serveur (ping type NTP, plusieurs allers-retours). Le VAR est diffusé avec un instant `t_var` en temps serveur ; chaque téléphone le convertit dans son horloge et ouvre son replay au même instant. *Test : clap devant les deux téléphones, VAR, les deux écrans montrent le clap à quelques images près.*
-11. Contrôles synchronisés : pause / vitesse / ◀ frame ▶ / position envoyés comme commandes, appliqués sur les deux lecteurs ; sortie du replay synchronisée. *Test : un joueur avance d'une image, l'autre écran suit.*
+**Replay sync across two angles**
+10. Shared clock: each phone estimates its offset to the server (NTP-style ping, several round trips). VAR is broadcast with an instant `t_var` in server time; each phone converts it to its own clock and opens its replay at the same instant. *Test: clap in front of both phones, VAR, both screens show the clap within a few frames.*
+11. Synchronized controls: pause / speed / ◀ frame ▶ / position sent as commands, applied on both players; leaving the replay is synchronized. *Test: one player steps one frame, the other screen follows.*
 
-**Intégration**
-12. Écran SCORE final (gros boutons, lisible de loin) avec caméra en fond + VAR → REPLAY → retour. *Test : un mini-match réel de quelques jeux.*
+**Integration**
+12. Final SCORE screen (big buttons, readable from a distance) with the camera in the background + VAR → REPLAY → back. *Test: a short real match of a few games.*
 
 ---
 
-## Vérification
-- Étapes 1–6 et 9–10 : sur vrai téléphone, chaque étape avec un critère observable (ci-dessus) et l'overlay de diagnostics.
-- Étape 7 : tests Jest automatisés.
-- Étape 8 : logs serveur + client.
-- Pas d'étape suivante tant que la précédente n'est pas validée par toi ; commit à chaque étape qui fonctionne.
+## Verification
+- Steps 1–6 and 9–10: on a real phone, each step with an observable criterion (above) and the diagnostics overlay.
+- Step 7: automated Jest tests.
+- Step 8: server + client logs.
+- No next step until the previous one is approved; commit at every step that works.
 
-## Risque ajouté
-- **Décalage d'horloge entre téléphones** : sans correction, les deux replays ne montrent pas le même instant. Mesure du décalage via le serveur ; précision visée ≈ 1–2 images.
+## Added risk
+- **Clock offset between phones**: without correction, the two replays do not show the same instant. Offset measured through the server; target accuracy ≈ 1–2 frames.
