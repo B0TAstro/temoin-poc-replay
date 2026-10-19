@@ -27,4 +27,5 @@ Settings › General › VPN & Device Management › Trust. The app expires afte
 cd app
 npx tsc --noEmit
 npx expo lint
+npm test        # tennis scoring unit tests, no phone needed
 ```

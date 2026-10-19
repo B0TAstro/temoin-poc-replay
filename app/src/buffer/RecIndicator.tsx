@@ -26,16 +26,7 @@ export function RecIndicator({ stats, recording }: { stats: BufferStats; recordi
 }
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 60,
-    right: 16,
-    alignItems: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
+  container: { alignItems: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center' },
   dot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#ef4444', marginRight: 8 },
   dotOff: { backgroundColor: '#666' },
