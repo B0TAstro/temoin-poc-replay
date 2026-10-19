@@ -11,6 +11,7 @@ players.
 |---|---|
 | `app/` | Expo app (React Native, TypeScript, development build) |
 | `app/src/app/` | Screens (expo-router) |
+| `app/src/buffer/` | Circular buffer: rotating video segments, last 30 seconds |
 | `app/src/diagnostics/` | On-screen measurements (real fps, …) |
 | `docs/` | Project brief, step-by-step plan, conventions, guides |
 | `server/` *(coming)* | Node WebSocket relay to sync score and replay |
@@ -25,4 +26,5 @@ players.
 ## Progress
 - [x] Step 0: Expo foundation + development build
 - [x] Step 1: full-screen back camera at 60 fps, real fps displayed *(to be verified on iPhone)*
-- [ ] Step 2: record a clip and play it back
+- [x] Step 2: 30 s circular buffer made of overlapping segments *(to be verified on iPhone)*
+- [ ] Step 3: VAR button and replay

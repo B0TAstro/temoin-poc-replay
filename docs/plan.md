@@ -63,7 +63,10 @@ Choices we can justify:
 3. We open the replay screen positioned ~5 s before the press, playing the segments back to back (automatic switch to the previous/next segment at the edges, global timeline "−10 s … 0 s").
 4. Recording resumes in the background into new segments (the match goes on). When leaving the replay, we unlock and cleanup resumes.
 
-### Known weak spot: the gap between two segments
+### Implemented choice: overlapping segments
+VisionCamera v5 in `enablePersistentRecorder` mode (iOS: `AVCaptureVideoDataOutput` + `AVAssetWriter`) feeds every frame to **all** active recorders. A segment starts every **5 s** and stops on its own at **5.5 s** (`maxDuration`): consecutive segments overlap by ~0.5 s, so **no frame is lost** between two files. Cost: two simultaneous encodes 10 % of the time. Code: `app/src/buffer/`.
+
+### Known weak spot: the gap between two segments (initial approach)
 Between `stop` and `start`, VisionCamera takes a few tens to a few hundred ms: those frames are lost. We **measure it from step 4** (end timestamp of one segment vs start of the next). Options if it is too much:
 - longer segments (10 s → fewer gaps, same VAR finalization);
 - plan B: a small native module (AVAssetWriter on iOS / MediaCodec + MediaMuxer on Android) that keeps **encoded H.264 samples** in a ring buffer and only writes the MP4 when VAR is pressed — zero gap, but native code. Only if measurements demand it.

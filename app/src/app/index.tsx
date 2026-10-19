@@ -7,10 +7,13 @@ import {
   useCameraDevice,
   useCameraPermission,
   useFrameOutput,
+  useVideoOutput,
   type CameraSessionConfig,
 } from 'react-native-vision-camera';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { RecIndicator } from '@/buffer/RecIndicator';
+import { useRollingBuffer } from '@/buffer/useRollingBuffer';
 import { useFpsMeter } from '@/diagnostics/useFpsMeter';
 
 const TARGET_FPS = 60;
@@ -21,6 +24,7 @@ export default function CameraScreen() {
   const device = useCameraDevice('back');
   const { fps, droppedCount, onFrameTimestamp, onFrameDropped } = useFpsMeter();
   const [selectedFps, setSelectedFps] = useState<number | undefined>();
+  const [cameraRunning, setCameraRunning] = useState(false);
 
   useEffect(() => {
     if (!hasPermission && canRequestPermission) requestPermission();
@@ -37,6 +41,14 @@ export default function CameraScreen() {
     },
     onFrameDropped,
   });
+
+  // "Persistent" mode (AVAssetWriter on iOS) accepts several recorders at the same time:
+  // this is what lets segments overlap.
+  const videoOutput = useVideoOutput({
+    targetResolution: CommonResolutions.HD_16_9,
+    enablePersistentRecorder: true,
+  });
+  const bufferStats = useRollingBuffer(videoOutput, cameraRunning);
 
   if (!hasPermission) {
     return (
@@ -68,8 +80,10 @@ export default function CameraScreen() {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive
-        outputs={[frameOutput]}
-        constraints={[{ fps: TARGET_FPS }]}
+        outputs={[videoOutput, frameOutput]}
+        constraints={[{ fps: TARGET_FPS }, { resolutionBias: videoOutput }]}
+        onStarted={() => setCameraRunning(true)}
+        onStopped={() => setCameraRunning(false)}
         onSessionConfigSelected={(config: CameraSessionConfig) => setSelectedFps(config.selectedFPS)}
         resizeMode="cover"
       />
@@ -81,6 +95,7 @@ export default function CameraScreen() {
           requested {TARGET_FPS} · configured {selectedFps ?? '—'} · dropped {droppedCount}
         </Text>
       </View>
+      <RecIndicator stats={bufferStats} recording={cameraRunning} />
     </View>
   );
 }
