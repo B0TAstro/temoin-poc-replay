@@ -1,0 +1,24 @@
+{
+  "name": "temoin-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebSocket relay that keeps the canonical score of a Témoin match on the local network",
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
+    "typescript": "^6.0.3"
+  }
+}

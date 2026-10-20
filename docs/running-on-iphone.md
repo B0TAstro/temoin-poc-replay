@@ -22,10 +22,31 @@ Settings › General › VPN & Device Management › Trust. The app expires afte
 - JS/TS changes only: `npx expo start` (iPhone and Mac on the same Wi-Fi), the app reloads.
 - New native library or `app.json` change: run `npx expo run:ios --device` again.
 
+## Two-phone match
+The score is synced through a small relay running on the computer (same Wi-Fi as both phones):
+```bash
+cd server
+npm install
+npm start          # prints the ws:// addresses it listens on (port 8787)
+```
+1. Install the app on both iPhones and start Metro (`npx expo start` in `app/`). In development the
+   app finds the relay on the computer that serves Metro; `EXPO_PUBLIC_RELAY_URL=ws://IP:8787` overrides it.
+2. Phone A: **Create match**. It shows a QR code and a 4-letter match code.
+3. Phone B: **Join match**, scan the QR code (the iPhone Camera app works too: it opens Témoin).
+4. Any phone proposes a point with **+1**; it only counts once the other phone taps **Confirm**.
+   **Disagree** shows *Open replay* on both phones; after the replay, the other player can still confirm,
+   or either player cancels. **Undo** is co-validated the same way.
+
+**Solo match** keeps everything on one phone, without the relay.
+
 ## Checks
 ```bash
 cd app
 npx tsc --noEmit
 npx expo lint
-npm test        # tennis scoring unit tests, no phone needed
+npm test        # tennis scoring and join link unit tests, no phone needed
+
+cd ../server
+npm test        # relay room logic (node:test)
+npm run typecheck
 ```

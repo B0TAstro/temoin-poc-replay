@@ -13,16 +13,18 @@ players.
 | `app/src/app/` | Screens (expo-router) |
 | `app/src/buffer/` | Circular buffer: rotating video segments, last 30 seconds |
 | `app/src/replay/` | VAR replay: segment timeline, slow motion, frame stepping, pinch to zoom |
-| `app/src/score/` | Pure tennis scoring logic (unit tested), score hook and scoreboard |
+| `app/src/score/` | Pure tennis scoring logic (unit tested) and scoreboard |
+| `app/src/sync/` | Relay client: co-validated points, pending action banner |
+| `app/src/pairing/` | QR code join link (generation and parsing) |
 | `app/src/diagnostics/` | On-screen measurements (real fps, …) |
 | `docs/` | Project brief, step-by-step plan, conventions, guides |
-| `server/` *(coming)* | Node WebSocket relay to sync score and replay |
-| `shared/` *(coming)* | Protocol types shared by the app and the server |
+| `server/` | Node WebSocket relay holding the canonical match state (unit tested) |
+| `shared/` | Protocol types shared by the app and the server |
 
 ## Documentation
 - [Project and constraints](docs/project.md)
 - [Technical plan and steps](docs/plan.md)
-- [Running on an iPhone](docs/running-on-iphone.md)
+- [Running on an iPhone](docs/running-on-iphone.md) (and a two-phone match)
 - [Expo conventions](docs/expo-conventions.md)
 
 ## Progress
@@ -31,4 +33,4 @@ players.
 - [x] Step 2: 30 s circular buffer made of overlapping segments *(to be verified on iPhone)*
 - [x] Step 3: VAR button, replay (x0.25 / x0.5, frame by frame, pinch to zoom), press → picture latency *(to be verified on iPhone)*
 - [x] Step 4: readable score screen (sets, games, points), +1 per player, undo; scoring logic covered by unit tests
-- [ ] Step 5: two-phone sync through a Node WebSocket relay, QR pairing, co-validated points *(to be verified on iPhone)*
+- [x] Step 5: two-phone sync through a Node WebSocket relay, QR pairing, co-validated points, replay offered on disagreement *(to be verified on iPhones)* *(to be verified on iPhone)*

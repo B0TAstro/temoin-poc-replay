@@ -12,7 +12,11 @@
       "bundleIdentifier": "com.tomboullay.temoin",
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "Témoin films the court so the last 30 seconds can be replayed. The video stays on this phone."
+        "NSCameraUsageDescription": "Témoin films the court so the last 30 seconds can be replayed. The video stays on this phone.",
+        "NSLocalNetworkUsageDescription": "Témoin connects to the relay on your local network to share the score between the two phones. No video is sent.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
