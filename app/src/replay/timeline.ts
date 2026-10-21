@@ -19,7 +19,7 @@ export type Timeline = {
 
 /**
  * Lays the last segments on a single timeline. Offsets come from the JS start times, which are
- * accurate to a few tens of ms: enough to switch from one overlapping segment to the next.
+ * accurate to a few tens of ms: enough to switch from one segment to the next.
  */
 export function buildTimeline(all: readonly Segment[], windowS = REPLAY_WINDOW_SECONDS): Timeline {
   const usable = all.filter((s) => s.durationS >= MIN_SEGMENT_SECONDS);
@@ -62,7 +62,7 @@ export function locate(timeline: Timeline, t: number, preferIndex?: number): { i
     }
   }
   if (index === -1) {
-    // Gap between segments (should not happen with overlap): jump to the next segment's start.
+    // Gap between two segments (frames lost between files): jump to the next segment's start.
     index = segments.findIndex((s) => s.offsetS > clamped);
     if (index === -1) index = segments.length - 1;
   }

@@ -94,6 +94,18 @@ export function pointLabels(score: Score): [string, string] {
   return [GAME_POINT_LABELS[a], GAME_POINT_LABELS[b]];
 }
 
+/**
+ * Where the match stands, to name the point played from this score: "Set 1 · Game 4 · 30-15",
+ * "Set 3 · Tie-break · 5-4". Points are listed side 0 first (a player today, a team in doubles).
+ */
+export function pointLabel(score: Score): string {
+  if (score.winner != null) return 'Match over';
+  const set = `Set ${score.sets.length + 1}`;
+  const points = pointLabels(score).join('-');
+  if (score.inTiebreak) return `${set} · Tie-break · ${points}`;
+  return `${set} · Game ${score.games[0] + score.games[1] + 1} · ${points}`;
+}
+
 /** A short status line: winner, tie-break, deuce or advantage. Empty when there is nothing to say. */
 export function statusLabel(score: Score, names: [string, string] = ['Player 1', 'Player 2']): string {
   if (score.winner != null) return `${names[score.winner]} wins`;

@@ -66,6 +66,8 @@ Choices we can justify:
 ### Implemented choice: overlapping segments
 VisionCamera v5 in `enablePersistentRecorder` mode (iOS: `AVCaptureVideoDataOutput` + `AVAssetWriter`) feeds every frame to **all** active recorders. A segment starts every **5 s** and stops on its own at **5.5 s** (`maxDuration`): consecutive segments overlap by ~0.5 s, so **no frame is lost** between two files. Cost: two simultaneous encodes 10 % of the time. Code: `app/src/buffer/`.
 
+**Update after the first iPhone test:** about 100 MB on disk for ~38 s of 720p60 (iOS picks the bitrate, ~20 Mbit/s, and VisionCamera's persistent recorder cannot change it). To cut storage, segments are now strictly 5 s (`OVERLAP_SECONDS = 0`) and at most 5 files are kept, including the one being recorded: ~25 s of video, ~60 MB. The overlay shows `GAP` if frames are lost between two files; setting `OVERLAP_SECONDS` back to 0.5 removes them.
+
 ### Known weak spot: the gap between two segments (initial approach)
 Between `stop` and `start`, VisionCamera takes a few tens to a few hundred ms: those frames are lost. We **measure it from step 4** (end timestamp of one segment vs start of the next). Options if it is too much:
 - longer segments (10 s → fewer gaps, same VAR finalization);

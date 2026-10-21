@@ -11,7 +11,7 @@ players.
 |---|---|
 | `app/` | Expo app (React Native, TypeScript, development build) |
 | `app/src/app/` | Screens (expo-router) |
-| `app/src/buffer/` | Circular buffer: rotating video segments, last 30 seconds |
+| `app/src/buffer/` | Circular buffer: 5 rotating video segments of 5 s (last ~25 seconds) |
 | `app/src/replay/` | VAR replay: segment timeline, slow motion, frame stepping, pinch to zoom |
 | `app/src/score/` | Pure tennis scoring logic (unit tested) and scoreboard |
 | `app/src/sync/` | Relay client: co-validated points, pending action banner |

@@ -3,17 +3,25 @@ import type { CameraVideoOutput, Recorder } from 'react-native-vision-camera';
 
 import { type Segment, SegmentStore } from './SegmentStore';
 
-export const BUFFER_SECONDS = 30;
 /** A new segment starts every SEGMENT_SECONDS… */
 export const SEGMENT_SECONDS = 5;
-/** …and each one lasts OVERLAP_SECONDS longer: consecutive segments overlap, so there is no gap. */
-export const OVERLAP_SECONDS = 0.5;
+/**
+ * …and each one lasts OVERLAP_SECONDS longer. 0 keeps files strictly 5 s long (smallest storage);
+ * 0.5 makes consecutive segments overlap so no frame is lost between two files.
+ */
+export const OVERLAP_SECONDS = 0;
+/** Files kept on disk, including the one being recorded: caps storage at ~5 × 5 s of video. */
+export const MAX_FILES = 5;
+/** Longest stretch of video the buffer can hold. */
+export const BUFFER_SECONDS = MAX_FILES * SEGMENT_SECONDS;
 /** Upper bound for finalizing the current segments when VAR is pressed. */
 const FREEZE_TIMEOUT_MS = 2000;
 
 export type BufferStats = {
   /** Seconds actually covered by the files on disk (capped at BUFFER_SECONDS). */
   bufferedS: number;
+  /** True once the oldest segment has been deleted at least once: the buffer is rotating. */
+  full: boolean;
   /** Files on disk, including the segments being recorded. */
   filesOnDisk: number;
   deletedCount: number;
@@ -63,13 +71,14 @@ function purgeStaleRecordings(currentPath: string) {
 }
 
 /**
- * Records continuously into short overlapping segments, and deletes the ones that leave the
- * BUFFER_SECONDS window as recording goes. Nothing is kept in memory: everything is on disk.
+ * Records continuously into short segments and keeps at most MAX_FILES of them on disk, deleting
+ * the oldest one as recording goes. Nothing is kept in memory: everything is on disk.
  *
  * Lifecycle: `start()` → (`freeze()` for a replay → `discard()`) → `start()` again.
  */
 export class RollingBuffer {
-  private store = new SegmentStore(BUFFER_SECONDS * 1000);
+  // One file is always being recorded, so the store keeps one finished segment less.
+  private store = new SegmentStore(MAX_FILES - 1);
   private active = new Map<Recorder, ActiveSegment>();
   private running = false;
   private purged = false;
@@ -124,6 +133,7 @@ export class RollingBuffer {
     const overlapMs = this.store.lastOverlapMs;
     return {
       bufferedS: Math.min(BUFFER_SECONDS, (now - oldest) / 1000),
+      full: this.store.deletedCount > 0,
       filesOnDisk: this.store.list.length + this.active.size,
       deletedCount: this.store.deletedCount,
       totalMB: this.store.totalBytes / 1e6,
@@ -173,7 +183,7 @@ export class RollingBuffer {
           sizeBytes: fileSize(path),
         });
         // While frozen for a replay, keep everything on disk.
-        if (this.running) for (const expired of this.store.prune(Date.now())) deleteFile(expired.path);
+        if (this.running) for (const expired of this.store.prune()) deleteFile(expired.path);
       }
       markFinished();
     };

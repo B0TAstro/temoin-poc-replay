@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { type Player, pointLabels, scoreMatch, statusLabel } from './tennis';
+import { type Player, pointLabel, pointLabels, scoreMatch, statusLabel } from './tennis';
 
 /** n points in a row for `player`. */
 const run = (player: Player, n: number): Player[] => Array.from({ length: n }, () => player);
@@ -140,5 +140,21 @@ describe('undo', () => {
     expect(beforeSet.sets).toEqual([]);
     expect(beforeSet.inTiebreak).toBe(true);
     expect(pointLabels(beforeSet)).toEqual(['6', '0']);
+  });
+});
+
+describe('point label', () => {
+  it('names the set, the game and the points', () => {
+    expect(pointLabel(scoreMatch([]))).toBe('Set 1 · Game 1 · 0-0');
+    expect(pointLabel(scoreMatch([...alternate(0, 3), 0, 0, 1]))).toBe('Set 1 · Game 4 · 30-15');
+  });
+
+  it('shows deuce and advantage as tennis points', () => {
+    expect(pointLabel(scoreMatch([0, 0, 0, 1, 1, 1, 1]))).toBe('Set 1 · Game 1 · 40-AD');
+  });
+
+  it('counts sets and switches to tie-break points', () => {
+    expect(pointLabel(scoreMatch([...games(0, 6), ...game(1)]))).toBe('Set 2 · Game 2 · 0-0');
+    expect(pointLabel(scoreMatch([...alternate(0, 12), 0, 0, 1]))).toBe('Set 1 · Tie-break · 2-1');
   });
 });

@@ -1,10 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { BUFFER_SECONDS, type BufferStats } from './useRollingBuffer';
+import type { BufferStats } from './useRollingBuffer';
 
 export function RecIndicator({ stats, recording }: { stats: BufferStats; recording: boolean }) {
   const seconds = Math.floor(stats.bufferedS);
-  const full = seconds >= BUFFER_SECONDS;
   const overlap = stats.lastOverlapS;
 
   return (
@@ -19,7 +18,7 @@ export function RecIndicator({ stats, recording }: { stats: BufferStats; recordi
       <Text style={[styles.detail, overlap != null && overlap < 0 && styles.warn]}>
         {overlap == null ? 'overlap —' : overlap >= 0 ? `overlap ${overlap.toFixed(2)} s` : `GAP ${(-overlap).toFixed(2)} s`}
         {stats.errorCount > 0 ? ` · errors ${stats.errorCount}` : ''}
-        {full ? '' : ' · filling…'}
+        {stats.full ? '' : ' · filling…'}
       </Text>
     </View>
   );

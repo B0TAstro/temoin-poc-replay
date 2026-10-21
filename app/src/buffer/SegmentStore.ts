@@ -18,18 +18,17 @@ export class SegmentStore {
   private segments: Segment[] = [];
   private deleted = 0;
 
-  constructor(private readonly windowMs: number) {}
+  constructor(private readonly maxSegments: number) {}
 
   add(segment: Segment) {
     this.segments.push(segment);
     this.segments.sort((a, b) => a.startedAt - b.startedAt);
   }
 
-  /** Removes and returns the segments that ended before `now - window`. */
-  prune(now: number): Segment[] {
-    const cutoff = now - this.windowMs;
-    const expired = this.segments.filter((s) => s.endedAt < cutoff);
-    this.segments = this.segments.filter((s) => s.endedAt >= cutoff);
+  /** Removes and returns the oldest segments beyond `maxSegments`. */
+  prune(): Segment[] {
+    const excess = Math.max(0, this.segments.length - this.maxSegments);
+    const expired = this.segments.splice(0, excess);
     this.deleted += expired.length;
     return expired;
   }
