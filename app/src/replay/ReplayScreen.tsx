@@ -1,25 +1,36 @@
-import { useMemo, useRef, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Video, { type VideoRef } from 'react-native-video';
 
-import type { Segment } from '@/buffer/SegmentStore';
+import type { Segment } from '@/clips/Segment';
 
 import { buildTimeline, locate } from './timeline';
 import { ZoomableView } from './ZoomableView';
 
 const RATES = [0.25, 0.5, 1] as const;
 const DEFAULT_RATE = 0.5;
-/** Where the replay opens, in seconds before the VAR press. */
+/** Where a point opens, in seconds before its end (the end is what players argue about). */
 const START_BEFORE_END_SECONDS = 5;
 
-type Props = {
+export type ReplayClip = {
+  key: string;
+  /** E.g. "Set 1 · Game 4 · 30-15". */
+  title: string;
+  /** E.g. "Last point", "Point in progress". */
+  subtitle: string;
   segments: readonly Segment[];
+};
+
+type Props = {
+  /** Oldest first: "◀" goes back in time. */
+  clips: readonly ReplayClip[];
+  initialIndex: number;
   /** Camera frame rate, used to step exactly one frame. */
   fps: number;
   /** performance.now() when VAR was pressed. */
   varPressedAt: number;
-  /** Time spent finalizing the segments in progress, in ms. */
+  /** Time spent finalizing the files in progress, in ms. */
   finalizeMs: number;
   onResume: () => void;
 };
@@ -28,11 +39,51 @@ const toUri = (path: string) => (path.startsWith('file://') ? path : `file://${p
 /** Only ever called from event handlers, never during render. */
 const now = () => performance.now();
 
+/** VAR: one point at a time, with "◀ / ▶" to move between the points kept on the phone. */
+export function ReplayScreen({ clips, initialIndex, fps, varPressedAt, finalizeMs, onResume }: Props) {
+  const [index, setIndex] = useState(initialIndex);
+  const clip = clips[index];
+  const header = (
+    <View style={styles.nav}>
+      <NavButton label="◀" disabled={index === 0} onPress={() => setIndex(index - 1)} />
+      <View style={styles.navText}>
+        <Text style={styles.navSubtitle}>
+          {clip.subtitle} · {index + 1}/{clips.length}
+        </Text>
+        <Text style={styles.navTitle} numberOfLines={2}>
+          {clip.title}
+        </Text>
+      </View>
+      <NavButton label="▶" disabled={index === clips.length - 1} onPress={() => setIndex(index + 1)} />
+    </View>
+  );
+
+  return (
+    <ClipPlayer
+      key={clip.key}
+      segments={clip.segments}
+      fps={fps}
+      // The latency is measured for the point VAR opens on, not after browsing.
+      measure={index === initialIndex ? { varPressedAt, finalizeMs } : undefined}
+      header={header}
+      onResume={onResume}
+    />
+  );
+}
+
+type PlayerProps = {
+  segments: readonly Segment[];
+  fps: number;
+  measure?: { varPressedAt: number; finalizeMs: number };
+  header: ReactNode;
+  onResume: () => void;
+};
+
 /**
- * Plays the last seconds before VAR. Overlapping segments are stacked, all loaded; only the
- * active one is visible, so switching segments needs no reload.
+ * Plays one point. Its files are stacked, all loaded; only the active one is visible, so switching
+ * files needs no reload.
  */
-export function ReplayScreen({ segments, fps, varPressedAt, finalizeMs, onResume }: Props) {
+function ClipPlayer({ segments, fps, measure, header, onResume }: PlayerProps) {
   const timeline = useMemo(() => buildTimeline(segments), [segments]);
   const initial = useMemo(() => {
     const t = Math.max(0, timeline.totalS - START_BEFORE_END_SECONDS);
@@ -91,16 +142,19 @@ export function ReplayScreen({ segments, fps, varPressedAt, finalizeMs, onResume
   const onInitialSeekDone = () => {
     if (initialSeekDone.current) return;
     initialSeekDone.current = true;
-    const ms = now() - varPressedAt;
-    setLatencyMs(ms);
-    console.log(`[VAR] press → replay picture: ${ms.toFixed(0)} ms (finalize ${finalizeMs.toFixed(0)} ms)`);
+    if (measure) {
+      const ms = now() - measure.varPressedAt;
+      setLatencyMs(ms);
+      console.log(`[VAR] press → replay picture: ${ms.toFixed(0)} ms (finalize ${measure.finalizeMs.toFixed(0)} ms)`);
+    }
     setPlaying(true);
   };
 
   if (timeline.segments.length === 0) {
     return (
       <SafeAreaView style={styles.empty}>
-        <Text style={styles.emptyText}>Nothing recorded yet.</Text>
+        <View style={styles.emptyHeader}>{header}</View>
+        <Text style={styles.emptyText}>No video for this point.</Text>
         <Pressable style={styles.resume} onPress={onResume}>
           <Text style={styles.resumeText}>Resume match</Text>
         </Pressable>
@@ -147,12 +201,14 @@ export function ReplayScreen({ segments, fps, varPressedAt, finalizeMs, onResume
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         <View style={styles.topBar} pointerEvents="box-none">
           <View style={styles.badge}>
-            <Text style={styles.badgeTitle}>VAR</Text>
-            <Text style={styles.badgeDetail}>
-              {latencyMs == null
-                ? 'loading…'
-                : `press → picture ${latencyMs.toFixed(0)} ms · finalize ${finalizeMs.toFixed(0)} ms`}
-            </Text>
+            {header}
+            {measure && (
+              <Text style={styles.badgeDetail}>
+                {latencyMs == null
+                  ? 'loading…'
+                  : `press → picture ${latencyMs.toFixed(0)} ms · finalize ${measure.finalizeMs.toFixed(0)} ms`}
+              </Text>
+            )}
           </View>
           <Pressable style={styles.resume} onPress={onResume}>
             <Text style={styles.resumeText}>Resume match</Text>
@@ -190,6 +246,19 @@ export function ReplayScreen({ segments, fps, varPressedAt, finalizeMs, onResume
   );
 }
 
+function NavButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={8}
+      style={({ pressed }) => [styles.navButton, pressed && styles.buttonOn, disabled && styles.navDisabled]}
+    >
+      {({ pressed }) => <Text style={[styles.navButtonText, pressed && styles.buttonTextOn]}>{label}</Text>}
+    </Pressable>
+  );
+}
+
 function ControlButton({
   label,
   onPress,
@@ -218,8 +287,7 @@ const styles = StyleSheet.create({
   hidden: { opacity: 0 },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'space-between' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 16 },
-  badge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, flexShrink: 1, marginRight: 12 },
-  badgeTitle: { color: '#facc15', fontSize: 24, fontWeight: '900' },
+  badge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, flex: 1, marginRight: 12, gap: 4 },
   badgeDetail: { color: '#ddd', fontSize: 13, fontVariant: ['tabular-nums'] },
   resume: { backgroundColor: '#22c55e', paddingHorizontal: 18, paddingVertical: 14, borderRadius: 12 },
   resumeText: { color: '#000', fontSize: 18, fontWeight: '800' },
@@ -235,4 +303,12 @@ const styles = StyleSheet.create({
   buttonTextOn: { color: '#000' },
   empty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: 24 },
   emptyText: { color: '#fff', fontSize: 22 },
+  emptyHeader: { alignSelf: 'stretch', marginHorizontal: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8, padding: 8 },
+  nav: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  navText: { flexShrink: 1, flexGrow: 1 },
+  navSubtitle: { color: '#facc15', fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
+  navTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  navButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  navButtonText: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  navDisabled: { opacity: 0.25 },
 });

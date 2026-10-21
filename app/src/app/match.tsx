@@ -1,7 +1,7 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Camera,
@@ -14,22 +14,24 @@ import {
 } from 'react-native-vision-camera';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { RecIndicator } from '@/buffer/RecIndicator';
-import type { Segment } from '@/buffer/SegmentStore';
-import { useRollingBuffer } from '@/buffer/useRollingBuffer';
+import { ClipIndicator } from '@/clips/ClipIndicator';
+import type { ClipsForReplay } from '@/clips/ClipRecorder';
+import { planDiskUsage } from '@/clips/diskSpace';
+import { useClipRecorder } from '@/clips/useClipRecorder';
 import { useFpsMeter } from '@/diagnostics/useFpsMeter';
 import { buildJoinLink } from '@/pairing/joinLink';
 import { QrCode } from '@/pairing/QrCode';
-import { ReplayScreen } from '@/replay/ReplayScreen';
+import { type ReplayClip, ReplayScreen } from '@/replay/ReplayScreen';
 import { ScoreBoard } from '@/score/ScoreBoard';
-import { scoreMatch } from '@/score/tennis';
+import { pointLabel, scoreMatch } from '@/score/tennis';
 import { PendingBanner } from '@/sync/PendingBanner';
 import { type MatchMode, useMatchSync } from '@/sync/useMatchSync';
+import { countPointEnds, usePointEvents } from '@/sync/usePointEvents';
 
 const TARGET_FPS = 60;
 const PLAYER_NAMES: [string, string] = ['Player 1', 'Player 2'];
 
-type Replay = { segments: Segment[]; varPressedAt: number; finalizeMs: number };
+type Replay = { clips: ReplayClip[]; initialIndex: number; varPressedAt: number; finalizeMs: number };
 
 type Params = { mode?: string; relay?: string; match?: string };
 
@@ -39,7 +41,34 @@ function toMatchMode({ mode, relay, match }: Params): MatchMode {
   return { kind: 'solo' };
 }
 
-/** Match screen: the score, read from a distance, with the camera recording the buffer. */
+/**
+ * VAR clips, oldest first: the kept points, then what was filmed of the point in progress.
+ * Opens on the last finished point.
+ */
+function toReplay({ finished, current }: ClipsForReplay, currentLabel: string): Omit<Replay, 'varPressedAt' | 'finalizeMs'> {
+  const clips: ReplayClip[] = [...finished].reverse().map((clip, i, all) => ({
+    key: `clip-${clip.id}`,
+    title: clip.point?.label ?? '',
+    subtitle: `${i === all.length - 1 ? 'Last point' : `Point ${(clip.point?.pointIndex ?? 0) + 1}`}${clip.trimmed ? ' · last 3 min' : ''}`,
+    segments: clip.segments,
+  }));
+  if (current.segments.length > 0 || clips.length === 0) {
+    clips.push({ key: `clip-${current.id}`, title: currentLabel, subtitle: 'Point in progress', segments: current.segments });
+  }
+  return { clips, initialIndex: Math.max(0, finished.length - 1) };
+}
+
+/** Tracks whether the app is in the foreground: iOS stops the camera otherwise. */
+function useAppActive() {
+  const [active, setActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => setActive(state === 'active'));
+    return () => subscription.remove();
+  }, []);
+  return active;
+}
+
+/** Match screen: the score, read from a distance, with the camera recording one clip per point. */
 export default function MatchScreen() {
   const params = useLocalSearchParams<Params>();
   const mode = useMemo(() => toMatchMode(params), [params]);
@@ -51,6 +80,9 @@ export default function MatchScreen() {
   const [cameraRunning, setCameraRunning] = useState(false);
   const [freezing, setFreezing] = useState(false);
   const [replay, setReplay] = useState<Replay | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [disk] = useState(planDiskUsage);
+  const appActive = useAppActive();
   const sync = useMatchSync(mode);
   const score = useMemo(() => scoreMatch(sync.points), [sync.points]);
   const names = PLAYER_NAMES.map((name, seat) =>
@@ -78,27 +110,38 @@ export default function MatchScreen() {
   });
 
   // "Persistent" mode (AVAssetWriter on iOS) accepts several recorders at the same time:
-  // this is what lets segments overlap.
+  // this is what lets the next file start before the previous one stops.
   const videoOutput = useVideoOutput({
     targetResolution: CommonResolutions.HD_16_9,
     enablePersistentRecorder: true,
   });
-  const { stats: bufferStats, buffer } = useRollingBuffer(videoOutput, cameraRunning && replay == null);
+  // The camera only runs while there is something to film. Stopping it finalizes the files.
+  const cameraActive = replay == null && !paused && appActive && disk.canRecord && score.winner == null;
+  const { stats: clipStats, clips } = useClipRecorder(videoOutput, cameraRunning && cameraActive, disk.maxSaved);
+  usePointEvents(clips, sync.points, sync.pending, mode.kind === 'solo' || sync.matchId != null);
+  const notRecordingReason = paused
+    ? 'PAUSED'
+    : score.winner != null
+      ? 'MATCH OVER'
+      : !disk.canRecord
+        ? 'NO VIDEO'
+        : 'STOPPED';
 
   const onVar = async () => {
     if (freezing || replay) return;
     setFreezing(true);
     const varPressedAt = performance.now();
-    // Finalize the segment(s) in progress so the replay contains the moment of the press.
-    const segments = await buffer.freeze();
-    setReplay({ segments, varPressedAt, finalizeMs: performance.now() - varPressedAt });
+    // Finalize the files in progress so the replay contains the moment of the press.
+    const frozen = await clips.freeze();
+    // The point in progress comes after a proposed point, if any.
+    const pending = sync.pending?.kind === 'point' ? [sync.pending.winner] : [];
+    const inProgressLabel = pointLabel(scoreMatch([...sync.points, ...pending]));
+    setReplay({ ...toReplay(frozen, inProgressLabel), varPressedAt, finalizeMs: performance.now() - varPressedAt });
     setFreezing(false);
   };
 
-  const onResume = () => {
-    buffer.discard(); // the replayed point is settled: start a fresh 30 s buffer
-    setReplay(null); // reactivates the camera; recording restarts as soon as it is running
-  };
+  // Reactivates the camera: recording goes on in the same point as soon as it is running.
+  const onResume = () => setReplay(null);
 
   if (!hasPermission) {
     return (
@@ -130,7 +173,7 @@ export default function MatchScreen() {
             <Camera
               style={StyleSheet.absoluteFill}
               device={device}
-              isActive={replay == null}
+              isActive={cameraActive}
               outputs={[videoOutput, frameOutput]}
               constraints={[{ fps: TARGET_FPS }, { resolutionBias: videoOutput }]}
               onStarted={() => setCameraRunning(true)}
@@ -144,7 +187,12 @@ export default function MatchScreen() {
               {connectionLabel(mode, sync.status, sync.matchId, sync.opponentConnected)}
             </Text>
             {sync.error != null && <Text style={styles.error}>{sync.error}</Text>}
-            <RecIndicator stats={bufferStats} recording={cameraRunning} />
+            {disk.warning != null && <Text style={styles.error}>{disk.warning}</Text>}
+            <ClipIndicator
+              stats={clipStats}
+              pointNumber={countPointEnds(sync.points, sync.pending) + 1}
+              state={notRecordingReason}
+            />
             <Text style={[styles.fps, fps < TARGET_FPS - 3 && styles.fpsLow]}>
               {fps.toFixed(0)} fps · {selectedFps ?? '—'} configured · {droppedCount} dropped
             </Text>
@@ -152,7 +200,7 @@ export default function MatchScreen() {
           <Pressable
             style={({ pressed }) => [styles.var, (pressed || freezing) && styles.pressed]}
             onPress={onVar}
-            disabled={!cameraRunning || freezing}
+            disabled={freezing}
           >
             <Text style={styles.varText}>{freezing ? '…' : 'VAR'}</Text>
           </Pressable>
@@ -187,13 +235,23 @@ export default function MatchScreen() {
             </Pressable>
           ))}
         </View>
-        <Pressable
-          style={({ pressed }) => [styles.undo, pressed && styles.pressed, !canUndo && styles.disabled]}
-          onPress={sync.proposeUndo}
-          disabled={!canUndo}
-        >
-          <Text style={styles.undoText}>Undo last point</Text>
-        </Pressable>
+        <View style={styles.secondaryButtons}>
+          <Pressable
+            style={({ pressed }) => [styles.undo, pressed && styles.pressed, !canUndo && styles.disabled]}
+            onPress={sync.proposeUndo}
+            disabled={!canUndo}
+          >
+            <Text style={styles.undoText}>Undo last point</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.undo, paused && styles.resumeRecording, pressed && styles.pressed]}
+            onPress={() => setPaused((p) => !p)}
+          >
+            <Text style={[styles.undoText, paused && styles.resumeRecordingText]}>
+              {paused ? 'Resume recording' : 'Pause recording'}
+            </Text>
+          </Pressable>
+        </View>
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Text style={styles.leave}>Leave match</Text>
         </Pressable>
@@ -213,7 +271,8 @@ export default function MatchScreen() {
 
       {replay && (
         <ReplayScreen
-          segments={replay.segments}
+          clips={replay.clips}
+          initialIndex={replay.initialIndex}
           fps={selectedFps ?? TARGET_FPS}
           varPressedAt={replay.varPressedAt}
           finalizeMs={replay.finalizeMs}
@@ -268,15 +327,18 @@ const styles = StyleSheet.create({
   },
   pointPlus: { color: '#fff', fontSize: 56, fontWeight: '900' },
   pointName: { color: '#dbeafe', fontSize: 20, fontWeight: '700' },
+  secondaryButtons: { flexDirection: 'row', gap: 16, marginBottom: 8 },
   undo: {
+    flex: 1,
     height: 64,
     borderRadius: 16,
     backgroundColor: '#333',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
-  undoText: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  undoText: { color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  resumeRecording: { backgroundColor: '#22c55e' },
+  resumeRecordingText: { color: '#000' },
   pressed: { opacity: 0.6 },
   disabled: { opacity: 0.35 },
   connection: { color: '#fff', fontSize: 13, fontWeight: '700' },

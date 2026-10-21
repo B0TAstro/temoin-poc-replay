@@ -39,12 +39,21 @@ npm start          # prints the ws:// addresses it listens on (port 8787)
 
 **Solo match** keeps everything on one phone, without the relay.
 
+## Point clips
+- Each **+1** ends the current point's clip and starts the next one (online: at the proposal; a cancelled
+  proposal or an undo glues the clips back together).
+- **VAR** opens the last finished point; **◀ / ▶** browse the kept points and the point in progress.
+- **Pause recording** stops the camera during a break; the point goes on recording after **Resume recording**.
+- The overlay shows `REC · Point N · m:ss`, the number of saved points, deleted files and MB on disk.
+  A point nobody validates only keeps its last 3 minutes.
+- **Leave match** deletes every clip.
+
 ## Checks
 ```bash
 cd app
 npx tsc --noEmit
 npx expo lint
-npm test        # tennis scoring and join link unit tests, no phone needed
+npm test        # scoring, clip queue, point events, timeline and join link unit tests
 
 cd ../server
 npm test        # relay room logic (node:test)

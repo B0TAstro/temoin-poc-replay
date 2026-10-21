@@ -68,6 +68,19 @@ VisionCamera v5 in `enablePersistentRecorder` mode (iOS: `AVCaptureVideoDataOutp
 
 **Update after the first iPhone test:** about 100 MB on disk for ~38 s of 720p60 (iOS picks the bitrate, ~20 Mbit/s, and VisionCamera's persistent recorder cannot change it). To cut storage, segments are now strictly 5 s (`OVERLAP_SECONDS = 0`) and at most 5 files are kept, including the one being recorded: ~25 s of video, ~60 MB. The overlay shows `GAP` if frames are lost between two files; setting `OVERLAP_SECONDS` back to 0.5 removes them.
 
+### Replaced after feedback: one clip per point
+A 30 s buffer loses the picture when a point is contested late, and 30 s is not a point. Recording is
+now continuous in files of 30 s (+0.5 s overlap), cut at each point end (the "+1" tap; online, the
+proposal). A **clip = the files between two point ends**, so gluing clips back (cancelled proposal,
+undo) is just merging two lists, with no re-encoding. `app/src/clips/`:
+- `ClipQueue` (pure, unit tested): the point being recorded + the last `MAX_SAVED_POINTS` (2), oldest
+  dropped; safety limit keeps the last 3 minutes of a point nobody validates; no player count in it.
+- `SegmentRecorder`: VisionCamera files, `cut()` starts the next file before stopping the previous one.
+- `ClipRecorder` / `useClipRecorder`: wiring, file deletion, stats; `PointEventSink` is the single
+  entry point for "end of point" (buttons today, voice recognition tomorrow).
+- VAR opens the last finished point (already written: no finalization wait) and browses the others.
+- Pause / resume button, camera stopped in background, free space checked at match start.
+
 ### Known weak spot: the gap between two segments (initial approach)
 Between `stop` and `start`, VisionCamera takes a few tens to a few hundred ms: those frames are lost. We **measure it from step 4** (end timestamp of one segment vs start of the next). Options if it is too much:
 - longer segments (10 s → fewer gaps, same VAR finalization);

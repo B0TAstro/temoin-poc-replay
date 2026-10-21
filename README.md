@@ -1,8 +1,8 @@
 # Témoin · replay POC
 
 A mobile app for amateur tennis matches played without an umpire: phones standing at the side of the
-court film continuously and keep the last 30 seconds. When players disagree, "VAR" replays the point
-in slow motion, frame by frame, on every phone of the match. The score is co-validated by both
+court film the match and keep one clip per point (the point being played plus the last two). When
+players disagree, "VAR" replays the point in slow motion, frame by frame, on every phone of the match. The score is co-validated by both
 players.
 
 ## Structure
@@ -11,10 +11,10 @@ players.
 |---|---|
 | `app/` | Expo app (React Native, TypeScript, development build) |
 | `app/src/app/` | Screens (expo-router) |
-| `app/src/buffer/` | Circular buffer: 5 rotating video segments of 5 s (last ~25 seconds) |
-| `app/src/replay/` | VAR replay: segment timeline, slow motion, frame stepping, pinch to zoom |
+| `app/src/clips/` | One clip per point: continuous recording cut at each point end, last points kept |
+| `app/src/replay/` | VAR replay: browse the kept points, slow motion, frame stepping, pinch to zoom |
 | `app/src/score/` | Pure tennis scoring logic (unit tested) and scoreboard |
-| `app/src/sync/` | Relay client: co-validated points, pending action banner |
+| `app/src/sync/` | Relay client: co-validated points, pending action banner, point end events |
 | `app/src/pairing/` | QR code join link (generation and parsing) |
 | `app/src/diagnostics/` | On-screen measurements (real fps, …) |
 | `docs/` | Project brief, step-by-step plan, conventions, guides |
@@ -33,4 +33,5 @@ players.
 - [x] Step 2: 30 s circular buffer made of overlapping segments *(to be verified on iPhone)*
 - [x] Step 3: VAR button, replay (x0.25 / x0.5, frame by frame, pinch to zoom), press → picture latency *(to be verified on iPhone)*
 - [x] Step 4: readable score screen (sets, games, points), +1 per player, undo; scoring logic covered by unit tests
-- [x] Step 5: two-phone sync through a Node WebSocket relay, QR pairing, co-validated points, replay offered on disagreement *(to be verified on iPhones)* *(to be verified on iPhone)*
+- [x] Step 5: two-phone sync through a Node WebSocket relay, QR pairing, co-validated points, replay offered on disagreement *(to be verified on iPhones)*
+- [x] Step 6: one clip per point instead of the 30 s buffer, VAR browses the last points, pause / resume recording *(to be verified on iPhone)*
